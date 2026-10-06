@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#18181b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Heladerías">
+<title>Heladerías — mapa de venta</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icono-180.png">
+<link rel="icon" href="icono-192.png">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header id="cab">
+  <div class="fila">
+    <h1>🍦 Heladerías</h1>
+    <div id="contadores" aria-live="polite"></div>
+    <button id="btnMenu" class="icono" aria-label="Menú: copia de seguridad y ayuda">☰</button>
+  </div>
+  <div class="fila">
+    <input id="buscar" type="search" placeholder="Buscar local o pueblo…" autocomplete="off" aria-label="Buscar">
+    <button id="btnFiltros" class="boton">Filtros</button>
+  </div>
+  <div class="rapidos" id="rapidos" role="group" aria-label="Filtros rápidos"></div>
+</header>
+
+<div id="avisos"></div>
+
+<main>
+  <div id="mapa" role="application" aria-label="Mapa de heladerías"></div>
+  <section id="lista" hidden>
+    <div class="orden" role="group" aria-label="Ordenar lista">
+      <button data-orden="prioridad" class="chip activo">🔥 Prioridad</button>
+      <button data-orden="cerca" class="chip">📍 Cerca de mí</button>
+      <button data-orden="ruta" class="chip">🚗 Ruta</button>
+      <button data-orden="zona" class="chip">🗺️ Por zonas</button>
+    </div>
+    <p id="explicaOrden" class="pista"></p>
+    <ol id="items"></ol>
+  </section>
+</main>
+
+<nav id="pestanas">
+  <button data-vista="mapa" class="activo">🗺️ Mapa</button>
+  <button data-vista="lista">📋 Lista</button>
+</nav>
+
+<!-- Ficha del local -->
+<div id="velo" hidden></div>
+<section id="ficha" class="hoja" hidden role="dialog" aria-modal="true" aria-labelledby="fNombre">
+  <div class="asa" aria-hidden="true"></div>
+  <button class="cerrar icono" data-cerrar aria-label="Cerrar">✕</button>
+  <div id="fichaCuerpo"></div>
+</section>
+
+<!-- Filtros -->
+<section id="filtros" class="hoja" hidden role="dialog" aria-modal="true" aria-label="Filtros">
+  <div class="asa" aria-hidden="true"></div>
+  <button class="cerrar icono" data-cerrar aria-label="Cerrar">✕</button>
+  <h2>Filtros</h2>
+  <div id="filtrosCuerpo"></div>
+  <div class="acciones">
+    <button id="limpiarFiltros" class="boton">Quitar filtros</button>
+    <button data-cerrar class="boton primario">Ver resultados</button>
+  </div>
+</section>
+
+<!-- Menú -->
+<section id="menu" class="hoja" hidden role="dialog" aria-modal="true" aria-label="Menú">
+  <div class="asa" aria-hidden="true"></div>
+  <button class="cerrar icono" data-cerrar aria-label="Cerrar">✕</button>
+  <h2>Tus datos</h2>
+  <p class="pista">Estados y notas se guardan <b>solo en este móvil</b>. Haz copia de vez en cuando (y siempre antes de cambiar de móvil).</p>
+  <div class="botonera">
+    <button id="exportarJson" class="boton primario">💾 Guardar copia (JSON)</button>
+    <button id="exportarCsv" class="boton">📊 Exportar tabla (CSV)</button>
+    <label class="boton">📥 Restaurar copia<input id="importar" type="file" accept=".json,application/json" hidden></label>
+  </div>
+  <p id="infoCopia" class="pista"></p>
+  <h2>Leyenda</h2>
+  <ul class="leyenda">
+    <li><span class="punto externo"></span><b>Compra fuera</b> — compra o revende helado de otro: objetivo.</li>
+    <li><span class="punto sindatos"></span><b>Sin datos</b> — no se sabe: preguntar al visitar.</li>
+    <li><span class="punto propio"></span><b>Fabrica él</b> — no ofrecer.</li>
+    <li><span class="punto competidor"></span><b>Competidor</b> — fabrica y vende a otros.</li>
+    <li>Tamaño del punto = prioridad. Dentro del punto, el estado de tu visita.</li>
+  </ul>
+  <h2>Instalar en el iPhone</h2>
+  <p class="pista" id="consejoInstalar">En Safari: botón <b>Compartir</b> (□↑) → <b>Añadir a pantalla de inicio</b>. Así abre como una app y iOS no borra tus datos aunque pases días sin usarla.</p>
+  <p class="pista" id="infoDatos"></p>
+</section>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="datos.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

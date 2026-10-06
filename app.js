@@ -151,6 +151,7 @@
     },
   });
   new Localizar().addTo(mapa);
+  mapa.on('zoomend', () => marcadores.forEach((m, id) => m.setIcon(icono(POR_ID.get(id)))));
 
   // Varios locales en el mismo punto (misma calle sin portal): se separan unos metros para poder tocarlos
   const grupos = {};
@@ -160,15 +161,20 @@
   });
 
   let numerosRuta = new Map();
+  // Tamaño según el zoom: pequeños de lejos, grandes de cerca
+  const escala = () => Math.min(1.25, Math.max(0.4, 0.4 + (mapa.getZoom() - 9) * 0.14));
   function icono(p) {
-    const e = efectivo(p);
+    const e = efectivo(p), k = escala();
     const num = numerosRuta.get(p.id);
-    if (num) return L.divIcon({ className: '', html: `<div class="mk ruta" style="width:26px;height:26px">${num}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] });
-    const t = TAM[e.prio];
+    if (num) {
+      const r = Math.max(20, Math.round(26 * k));
+      return L.divIcon({ className: '', html: `<div class="mk ruta" style="width:${r}px;height:${r}px">${num}</div>`, iconSize: [r, r], iconAnchor: [r / 2, r / 2] });
+    }
+    const t = Math.max(7, Math.round(TAM[e.prio] * k));
     const txt = e.estado !== 'pendiente' && t >= 18 ? EST[e.estado].i : '';
     return L.divIcon({
       className: '', iconSize: [t, t], iconAnchor: [t / 2, t / 2],
-      html: `<div class="mk ${e.clase}${e.prio === 'no' ? ' no' : ''}" style="width:${t}px;height:${t}px;font-size:${t > 22 ? 13 : 10}px">${txt}</div>`,
+      html: `<div class="mk ${e.clase}${e.prio === 'no' ? ' no' : ''}${t < 14 ? ' mini' : ''}" style="width:${t}px;height:${t}px;font-size:${t > 22 ? 13 : 10}px">${txt}</div>`,
     });
   }
   const marcadores = new Map();

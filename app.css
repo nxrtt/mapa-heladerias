@@ -68,6 +68,7 @@ main { flex: 1; position: relative; min-height: 0; }
 .mk.externo { background: var(--externo); } .mk.sindatos { background: var(--sindatos); }
 .mk.propio { background: var(--propio); } .mk.competidor { background: var(--competidor); }
 .mk.no { opacity: .6; border-width: 1px; }
+.mk.mini { border-width: 1px; box-shadow: 0 0 2px rgba(0,0,0,.8); }
 .mk.ruta { background: #111; border-color: var(--azul); color: #fff; font-weight: 700; font-size: 12px; }
 .yo { width: 16px; height: 16px; background: var(--azul); border: 3px solid #fff; border-radius: 50%; box-shadow: 0 0 0 6px rgba(62,142,247,.3); }
 .leaflet-control-zoom a, .leaflet-control-layers-toggle { width: 40px !important; height: 40px !important; line-height: 40px !important; }

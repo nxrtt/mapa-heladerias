@@ -6,13 +6,23 @@
   const POR_ID = new Map(D.map(p => [p.id, p]));
   const CLAVE = 'xavi_helados_v2';      // estados, notas, historial
   const CLAVE_UI = 'xavi_helados_ui';   // filtros y vista
+  // Estados que marca Xavi. 'sin' = todavía sin marcar (tocar de nuevo un estado activo lo desmarca).
   const ESTADOS = [
-    ['pendiente', '⏳', 'Pendiente'], ['contactado', '📞', 'Contactado'],
-    ['vendido', '💰', 'Vendido'], ['no_interesado', '❌', 'No interesado'],
-    ['in_situ_propio', '🟢', 'In situ: fabrica él'], ['in_situ_compra', '🔴', 'In situ: compra producto'],
+    ['visitar', '🚶', 'Visitar en persona'], ['llamar', '📞', 'Llamar'],
+    ['cliente', '🤝', 'Cliente'], ['no_interesado', '❌', 'No interesado'],
+    ['fabrica', '🟢', 'Fabrica él'], ['compra_terceros', '🔴', 'Compra a terceros'],
+    ['compra_competencia', '🏭', 'Compra a la competencia'],
   ];
-  const EST = Object.fromEntries(ESTADOS.map(([k, i, t]) => [k, { i, t }]));
-  const HECHO = new Set(['vendido', 'no_interesado', 'in_situ_propio']);
+  const EST = Object.fromEntries([['sin', '', 'Sin marcar'], ...ESTADOS].map(([k, i, t]) => [k, { i, t }]));
+  const HECHO = new Set(['cliente', 'no_interesado', 'fabrica']);
+  const COMPRA = new Set(['compra_terceros', 'compra_competencia']);
+  // Nombres de estados de versiones anteriores de la app → nombres actuales
+  const EQUIV_ESTADO = { pendiente: 'sin', contactado: 'llamar', vendido: 'cliente', in_situ_propio: 'fabrica', in_situ_compra: 'compra_terceros', hace_propio: 'fabrica' };
+  const estadoActual = e => (EST[e] ? e : EQUIV_ESTADO[e] || 'sin');
+  function migrarRegistro(r) {
+    if (!r || typeof r !== 'object') return null;
+    return { ...r, estado: estadoActual(r.estado), hist: (r.hist || []).map(h => (h.e === 'visita' ? h : { ...h, e: estadoActual(h.e) })) };
+  }
   const CLASE_TXT = { externo: '🔴 Compra fuera', sindatos: '🟡 Sin datos', propio: '🟢 Fabrica él', competidor: '🟣 Competidor' };
   const CLAS_LARGO = { externo: '🔴 PROBABLE PRODUCTO EXTERNO', sindatos: '🟡 SIN DATOS', propio: '🟢 FABRICA ÉL', competidor: '🟣 COMPETIDOR (fabrica y vende)' };
   const PRIO_TXT = { muy_alta: '🔥 Muy alta', alta: '🟠 Alta', media: '🟡 Media', baja: '⚪ Baja', no: '❌ No objetivo' };
@@ -24,7 +34,7 @@
   const $ = s => document.querySelector(s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const urlSegura = u => (/^https?:\/\//i.test(u || '') ? u : '');
-  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const hoyISO = () => new Date().toISOString().slice(0, 10);
   const fechaCorta = iso => iso ? new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
   const fechaHora = iso => new Date(iso).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -34,19 +44,23 @@
   function cargar() {
     let s = null;
     try { s = JSON.parse(localStorage.getItem(CLAVE)); } catch (e) { /* vacío o corrupto */ }
-    if (!s || typeof s !== 'object' || typeof s.locales !== 'object') s = { v: 2, locales: {}, ultimaCopia: null, cambiosDesdeCopia: 0 };
+    if (!s || typeof s !== 'object' || typeof s.locales !== 'object') s = { v: 3, locales: {}, ultimaCopia: null, cambiosDesdeCopia: 0 };
+    let cambio = false;
     if (!s.migrado) {   // estados del mapa anterior (claves helado_estado_<id>); no se borran
-      const equiv = { vendido: 'vendido', no_interesado: 'no_interesado', hace_propio: 'in_situ_propio' };
       try {
         for (let i = 0; i < localStorage.length; i++) {
           const m = /^helado_estado_(\d+)$/.exec(localStorage.key(i) || '');
-          const e = m && equiv[localStorage.getItem(m[0])];
-          if (e && !s.locales[m[1]]) s.locales[m[1]] = { estado: e, nota: '', hist: [{ f: new Date().toISOString(), e, origen: 'mapa anterior' }], t: Date.now() };
+          const e = m && estadoActual(localStorage.getItem(m[0]));
+          if (e && e !== 'sin' && !s.locales[m[1]]) s.locales[m[1]] = { estado: e, nota: '', hist: [{ f: new Date().toISOString(), e, origen: 'mapa anterior' }], t: Date.now() };
         }
       } catch (e) { /* sin acceso */ }
-      s.migrado = true;
-      try { localStorage.setItem(CLAVE, JSON.stringify(s)); } catch (e) { /* se avisará al guardar */ }
+      s.migrado = true; cambio = true;
     }
+    if ((s.v || 2) < 3) {   // estados de la versión 2 (pendiente, vendido, in_situ_*) → estados actuales; notas intactas
+      Object.keys(s.locales).forEach(id => { s.locales[id] = migrarRegistro(s.locales[id]); });
+      s.v = 3; cambio = true;
+    }
+    if (cambio) { try { localStorage.setItem(CLAVE, JSON.stringify(s)); } catch (e) { /* se avisará al guardar */ } }
     return s;
   }
   let errorGuardar = false;
@@ -55,7 +69,7 @@
     catch (e) { errorGuardar = true; }
     pintarAvisos();
   }
-  const reg = id => almacen.locales[id] || { estado: 'pendiente', nota: '', hist: [], t: 0 };
+  const reg = id => almacen.locales[id] || { estado: 'sin', nota: '', hist: [], t: 0 };
   function setReg(id, cambios) {
     almacen.locales[id] = Object.assign({}, reg(id), cambios, { t: Date.now() });
     almacen.cambiosDesdeCopia = (almacen.cambiosDesdeCopia || 0) + 1;
@@ -76,21 +90,25 @@
   function efectivo(p) {
     const r = reg(p.id);
     let clase = p.competidor ? 'competidor' : p.clas, prio = p.prioridad;
-    if (r.estado === 'in_situ_propio') { clase = 'propio'; prio = 'no'; }
-    else if (r.estado === 'in_situ_compra' && !p.competidor) { clase = 'externo'; prio = p.franquicia ? 'media' : 'muy_alta'; }
+    if (r.estado === 'fabrica') { clase = 'propio'; prio = 'no'; }
+    else if (COMPRA.has(r.estado) && !p.competidor) { clase = 'externo'; prio = p.franquicia ? 'media' : 'muy_alta'; }
     return { clase, prio, estado: r.estado, hecho: HECHO.has(r.estado) };
   }
 
   // ------------------------------------------------------------------ filtros
-  const SETS = ['provincia', 'zona', 'clase', 'conf', 'prio', 'precio', 'estado'];
+  const SETS = ['provincia', 'zona', 'clase', 'conf', 'prio', 'precio', 'estado', 'origen'];
   const F = { texto: '', municipio: ui.municipio || '', rapidos: new Set(ui.rapidos || []) };
   SETS.forEach(k => { F[k] = new Set((ui.filtros || {})[k] || []); });
   const RAPIDOS = [
     ['calientes', '🔥 Calientes', 'Prioridad muy alta/alta sin visitar'],
     ['girona', 'Girona', 'Provincia de Girona'],
     ['barcelona', 'Barcelona', 'Provincia de Barcelona'],
+    ['visitar', '🚶 Visitar', 'Marcados para visitar en persona'],
+    ['llamar', '📞 Llamar', 'Marcados para llamar'],
+    ['competencia', '🏭 Compran a la competencia', 'Compran a otro fabricante (según la investigación o lo que marcaste)'],
     ['objetivos', '🎯 Solo objetivos', 'Oculta los que fabrican o compiten'],
-    ['pendientes', '⏳ Sin visitar', 'Pendientes o contactados'],
+    ['sinmarcar', '⏳ Sin marcar', 'Aún sin ningún estado'],
+    ['clientes', '🤝 Clientes', 'Marcados como cliente'],
   ];
   function pasaFiltro(p) {
     const e = efectivo(p);
@@ -99,7 +117,11 @@
     if (R.has('girona') && !R.has('barcelona') && p.provincia !== 'Girona') return false;
     if (R.has('barcelona') && !R.has('girona') && p.provincia !== 'Barcelona') return false;
     if (R.has('objetivos') && e.prio === 'no') return false;
-    if (R.has('pendientes') && !(e.estado === 'pendiente' || e.estado === 'contactado')) return false;
+    if (R.has('visitar') && e.estado !== 'visitar') return false;
+    if (R.has('llamar') && e.estado !== 'llamar') return false;
+    if (R.has('competencia') && !(p.competencia || e.estado === 'compra_competencia')) return false;
+    if (R.has('sinmarcar') && e.estado !== 'sin') return false;
+    if (R.has('clientes') && e.estado !== 'cliente') return false;
     if (F.provincia.size && !F.provincia.has(p.provincia)) return false;
     if (F.zona.size && !F.zona.has(p.zona)) return false;
     if (F.municipio && p.municipio !== F.municipio) return false;
@@ -111,6 +133,7 @@
       if (!trozos.some(t => F.precio.has(t))) return false;
     }
     if (F.estado.size && !F.estado.has(e.estado)) return false;
+    if (F.origen.size && !F.origen.has(p.auto ? 'inventario' : 'investigado')) return false;
     if (F.texto) {
       const h = norm([p.nombre, p.municipio, p.zona, p.direccion, p.tipo].join(' '));
       if (!F.texto.split(/\s+/).every(w => h.includes(w))) return false;
@@ -171,12 +194,29 @@
       return L.divIcon({ className: '', html: `<div class="mk ruta" style="width:${r}px;height:${r}px">${num}</div>`, iconSize: [r, r], iconAnchor: [r / 2, r / 2] });
     }
     const t = Math.max(7, Math.round(TAM[e.prio] * k));
-    const txt = e.estado !== 'pendiente' && t >= 18 ? EST[e.estado].i : '';
+    const marca = e.estado !== 'sin' ? EST[e.estado].i : '';
+    if (t >= 24 || mapa.getZoom() >= 15) {   // grandes/de cerca: cuadrado con el logo o foto del local (o sus iniciales) y el estado en la esquina
+      const c = Math.round(t * 1.35);
+      const cara = p.img ? `<img src="${p.img}" alt="" loading="lazy" decoding="async">` : `<span class="ini">${esc(iniciales(p.nombre))}</span>`;
+      return L.divIcon({
+        className: '', iconSize: [c, c], iconAnchor: [c / 2, c / 2],
+        html: `<div class="mk cuadro ${e.clase}${e.prio === 'no' ? ' no' : ''}" style="width:${c}px;height:${c}px;font-size:${Math.round(c * 0.36)}px">${cara}${marca ? `<b class="est">${marca}</b>` : ''}</div>`,
+      });
+    }
+    const txt = t >= 18 ? marca : '';
     return L.divIcon({
       className: '', iconSize: [t, t], iconAnchor: [t / 2, t / 2],
       html: `<div class="mk ${e.clase}${e.prio === 'no' ? ' no' : ''}${t < 14 ? ' mini' : ''}" style="width:${t}px;height:${t}px;font-size:${t > 22 ? 13 : 10}px">${txt}</div>`,
     });
   }
+  const GENERICAS = new Set(['la', 'el', 'de', 'les', 'del', 'i', 'y', 'the', 'gelateria', 'heladeria', 'heladería', 'gelats', 'gelat', 'helados', 'gelato', 'gelati', 'ice', 'cream', 'artesanal', 'artesans', 'orxateria', 'cafeteria', 'cafetería', 'granja']);
+  function iniciales(nombre) {
+    const w = String(nombre).replace(/[|(·–-].*$/, '').split(/\s+/).filter(x => x && !GENERICAS.has(x.toLowerCase()));
+    const base = w.length ? w : String(nombre).split(/\s+/);
+    return base.slice(0, 2).map(x => x.replace(/[^\p{L}\p{N}]/gu, '').charAt(0)).join('').toUpperCase() || '🍦';
+  }
+  const miniatura = (p, tam) => p.img ? `<img class="mini-img" src="${p.img}" alt="" width="${tam}" height="${tam}" loading="lazy">`
+    : `<span class="mini-img ini ${efectivo(p).clase}" style="width:${tam}px;height:${tam}px">${esc(iniciales(p.nombre))}</span>`;
   const marcadores = new Map();
   D.forEach(p => {
     if (p.lat == null) return;
@@ -233,15 +273,13 @@
     if (!$('#lista').hidden) pintarLista();
   }
   function pintarContadores() {
-    let porVisitar = 0, vendidos = 0, insitu = 0;
+    let abiertos = 0, clientes = 0;
     D.forEach(p => {
       const e = efectivo(p);
-      if (e.prio !== 'no' && (e.estado === 'pendiente' || e.estado === 'contactado')) porVisitar++;
-      if (e.estado === 'vendido') vendidos++;
-      if (e.estado.startsWith('in_situ')) insitu++;
+      if (e.prio !== 'no' && !e.hecho) abiertos++;
+      if (e.estado === 'cliente') clientes++;
     });
-    $('#contadores').innerHTML = `<span title="Objetivos sin cerrar">🎯 ${porVisitar}</span><span title="Vendidos">💰 ${vendidos}</span>` +
-      (insitu ? `<span title="Comprobados en persona">✔ ${insitu}</span>` : '') +
+    $('#contadores').innerHTML = `<span title="Objetivos sin cerrar">🎯 ${abiertos}</span><span title="Clientes">🤝 ${clientes}</span>` +
       `<span title="Visibles con los filtros">👁 ${visibles.length}</span>`;
   }
   function pintarRapidos() {
@@ -282,10 +320,10 @@
   }
   function itemHtml(p, n, extra) {
     const e = efectivo(p), r = reg(p.id);
-    const est = e.estado !== 'pendiente' ? ` · ${EST[e.estado].i} ${EST[e.estado].t}` : '';
+    const est = e.estado !== 'sin' ? ` · ${EST[e.estado].i} ${EST[e.estado].t}` : '';
     return `<li class="${e.clase}${e.hecho ? ' hecho' : ''}" data-id="${p.id}" tabindex="0">
-      <span class="n">${n}</span>
-      <span class="t"><b>${esc(p.nombre)}</b><small>${esc(p.municipio)} · ${PRIO_TXT[e.prio]} · ${CLASE_TXT[e.clase]}${est}${r.nota ? ' · 📝' : ''}</small></span>
+      <span class="n">${n}</span>${miniatura(p, 36)}
+      <span class="t"><b>${esc(p.nombre)}</b><small>${esc(p.municipio)} · ${PRIO_TXT[e.prio]} · ${CLASE_TXT[e.clase]}${est}${p.proveedor ? ' · 🏭' : ''}${r.nota ? ' · 📝' : ''}</small></span>
       ${extra ? `<span class="dist">${extra}</span>` : ''}</li>`;
   }
   function pintarLista() {
@@ -294,7 +332,7 @@
     numerosRuta = new Map(); capaRuta.clearLayers();
     let html = '';
     if (orden === 'prioridad') {
-      expl.textContent = 'Primero los mejores objetivos sin visitar. Los vendidos/descartados van al final.';
+      expl.textContent = 'Primero los mejores objetivos sin cerrar. Clientes, no interesados y los que fabrican van al final.';
       html = visibles.slice().sort(cmpPrioridad).map((p, i) => itemHtml(p, i + 1)).join('');
     } else if (orden === 'cerca' || orden === 'ruta') {
       if (!posicion) {
@@ -381,7 +419,7 @@
   // ------------------------------------------------------------------ ficha del local
   let fichaId = null;
   const telHref = t => { let d = String(t).replace(/[^\d+]/g, ''); if (/^\d{9}$/.test(d)) d = '+34' + d; return 'tel:' + d; };
-  const exacto = p => p.precision === 'direccion' || p.precision === 'osm';
+  const exacto = p => p.precision === 'direccion' || p.precision === 'osm' || p.precision === 'directorio';
   const destino = p => exacto(p) ? `${p.lat},${p.lon}` : encodeURIComponent(`${p.nombre}, ${p.direccion || p.municipio}`);
   function enlaceIr(p) {
     return ES_IOS ? `https://maps.apple.com/?daddr=${destino(p)}&dirflg=d`
@@ -407,15 +445,17 @@
       `<span class="etq prio">Confianza ${esc(p.conf)}</span>`,
       p.franquicia ? '<span class="etq prio">Franquicia / marca</span>' : '',
       p.activo !== 'si' ? `<span class="etq aviso2">${p.activo === 'cerrado' ? 'Cerrado' : '¿Abierto? Sin confirmar'}</span>` : '',
-      e.estado.startsWith('in_situ') ? `<span class="etq prio">Comprobado por ti: ${EST[e.estado].t}</span>` : '',
+      p.auto ? '<span class="etq prio">Del inventario: sin investigar a fondo</span>' : '',
+      e.estado !== 'sin' ? `<span class="etq prio">Marcado: ${EST[e.estado].i} ${EST[e.estado].t}</span>` : '',
     ].join('');
+    const proveedor = p.proveedor ? `<div class="motivo prov">🏭 <b>Compra a${p.competencia ? ' la competencia' : ''}:</b> ${esc(p.proveedor)}</div>` : '';
     const ev = (p.ev || []).map(x => `<li><span class="peso ${esc(x.peso)}">${esc(x.peso)}</span>${esc(x.t)}${urlSegura(x.u) ? ` <a href="${esc(x.u)}" target="_blank" rel="noopener">fuente ↗</a>` : ''}</li>`).join('')
       || '<li>Sin evidencia encontrada.</li>';
     const hist = (r.hist || []).slice().reverse().map(h => `<li>${fechaHora(h.f)} — ${h.e === 'visita' ? '📅 Visitado' : (EST[h.e] ? EST[h.e].i + ' ' + EST[h.e].t : esc(h.e))}${h.origen ? ' (' + esc(h.origen) + ')' : ''}</li>`).join('');
     const res = p.resenas && p.resenas[0] ? `⭐ ${p.resenas[0]}${p.resenas[1] ? ` (${p.resenas[1]} reseñas)` : ''} · ` : '';
     $('#fichaCuerpo').innerHTML = `
-      <h3 class="fTitulo" id="fNombre">${esc(p.nombre)}</h3>
-      <div class="fSub">${esc(p.tipo)} · ${esc(p.municipio)} (${esc(p.zona)})</div>
+      <div class="fCabeza">${miniatura(p, 56)}<div><h3 class="fTitulo" id="fNombre">${esc(p.nombre)}</h3>
+      <div class="fSub">${esc(p.tipo)} · ${esc(p.municipio)} (${esc(p.zona)})</div></div></div>
       <div class="etiquetas">${etq}</div>
       <div class="fSub">📍 ${esc(p.direccion || 'Dirección sin confirmar')}${p.tel ? ` · 📞 ${esc(p.tel)}` : ''}</div>
       ${avisoUbic}
@@ -429,8 +469,10 @@
         <button data-accion="nota"><span>📝</span>Nota</button>
       </div>
       <div class="motivo"><b>Por qué:</b> ${esc(p.motivo)}<br><b>Qué hacer:</b> ${esc(p.accion || '—')}</div>
-      <h2>Estado de la visita</h2>
+      ${proveedor}
+      <h2>Estado</h2>
       <div class="estados">${ESTADOS.map(([k, i, t]) => `<button data-estado="${k}" class="${r.estado === k ? 'activo' : ''}" aria-pressed="${r.estado === k}">${i} ${t}</button>`).join('')}</div>
+      <p class="pista">Toca otra vez el estado marcado para quitarlo.</p>
       <p class="pista">${r.visita ? 'Última visita: ' + fechaCorta(r.visita) : 'Aún sin visitar'}</p>
       <h2>Nota</h2>
       <textarea id="nota" placeholder="Ej.: Hablé con el encargado. Compra la base a X. Volver el martes." aria-label="Nota sobre el local">${esc(r.nota || '')}</textarea>
@@ -463,12 +505,12 @@
     const p = POR_ID.get(fichaId);
     const be = ev.target.closest('[data-estado]');
     if (be) {
-      const nuevo = be.dataset.estado, r = reg(p.id);
-      if (nuevo === r.estado) return;
+      const r = reg(p.id), nuevo = be.dataset.estado === r.estado ? 'sin' : be.dataset.estado;
       guardarNotaPendiente();
-      setReg(p.id, { estado: nuevo, visita: nuevo === 'pendiente' ? r.visita : hoyISO(), hist: [...(r.hist || []), { f: new Date().toISOString(), e: nuevo }] });
+      const contacto = !['sin', 'visitar', 'llamar'].includes(nuevo);   // estos estados implican haber hablado con el local
+      setReg(p.id, { estado: nuevo, visita: contacto ? hoyISO() : r.visita, hist: [...(r.hist || []), { f: new Date().toISOString(), e: nuevo }] });
       actualizarMarcador(p); pintarFicha(); refrescar(false);
-      toast(`${EST[nuevo].i} ${EST[nuevo].t}`);
+      toast(nuevo === 'sin' ? 'Estado quitado' : `${EST[nuevo].i} ${EST[nuevo].t}`);
       return;
     }
     const ba = ev.target.closest('[data-accion]'); if (!ba) return;
@@ -503,7 +545,8 @@
       grupoChips('Prioridad comercial', 'prio', Object.entries(PRIO_TXT)) +
       grupoChips('Confianza de la evidencia', 'conf', [['alta', 'Alta'], ['media', 'Media'], ['baja', 'Baja']]) +
       grupoChips('Precio', 'precio', [['€', '€'], ['€€', '€€'], ['€€€', '€€€'], ['?', 'Sin dato']]) +
-      grupoChips('Estado de visita', 'estado', ESTADOS.map(([k, i, t]) => [k, `${i} ${t}`]));
+      grupoChips('Estado', 'estado', [['sin', '⏳ Sin marcar'], ...ESTADOS.map(([k, i, t]) => [k, `${i} ${t}`])]) +
+      grupoChips('Origen de los datos', 'origen', [['investigado', '🔎 Investigado a fondo'], ['inventario', '📋 Solo inventario (sin investigar)']]);
   }
   $('#btnFiltros').addEventListener('click', () => { pintarFiltros(); abrirHoja('filtros'); });
   $('#filtrosCuerpo').addEventListener('click', ev => {
@@ -546,15 +589,15 @@
   function exportarCsv() {
     guardarNotaPendiente();
     const cols = ['id', 'nombre', 'municipio', 'zona', 'provincia', 'direccion', 'lat', 'lon', 'precision_ubicacion', 'telefono', 'web', 'instagram',
-      'clasificacion', 'confianza', 'prioridad', 'puntos', 'franquicia', 'competidor', 'estado_visita', 'ultima_visita', 'nota', 'motivo', 'accion', 'fuentes', 'comprobado'];
+      'clasificacion', 'confianza', 'prioridad', 'puntos', 'franquicia', 'competidor', 'compra_a', 'estado', 'ultima_visita', 'nota', 'motivo', 'accion', 'fuentes', 'comprobado'];
     const q = v => '"' + String(v ?? '').replace(/"/g, '""').replace(/\r?\n/g, ' / ') + '"';
     const filas = D.slice().sort(cmpPrioridad).map(p => {
       const e = efectivo(p), r = reg(p.id);
       return [p.id, p.nombre, p.municipio, p.zona, p.provincia, p.direccion, p.lat, p.lon, p.precision, p.tel, p.web, p.ig,
-        CLASE_TXT[e.clase], p.conf, PRIO_TXT[e.prio], p.puntos, p.franquicia ? 'sí' : 'no', p.competidor ? 'sí' : 'no',
+        CLASE_TXT[e.clase], p.conf, PRIO_TXT[e.prio], p.puntos, p.franquicia ? 'sí' : 'no', p.competidor ? 'sí' : 'no', p.proveedor || '',
         EST[e.estado].t, r.visita || '', r.nota || '', p.motivo, p.accion, (p.ev || []).map(x => x.u).filter(Boolean).join(' '), p.comprobado].map(q).join(';');
     });
-    const csv = '﻿' + cols.join(';') + '\n' + filas.join('\n');
+    const csv = '\uFEFF' + cols.join(';') + '\n' + filas.join('\n');
     entregarArchivo(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `heladerias-${sello()}.csv`);
   }
   $('#exportarJson').addEventListener('click', exportarJson);
@@ -569,16 +612,17 @@
     if (!confirm(`La copia tiene datos de ${n} locales (${obj.exportado ? fechaHora(obj.exportado) : 'sin fecha'}).\n\nSe combinará con lo que hay en este móvil: en cada local se queda el cambio más reciente. No se borra nada más. ¿Seguir?`)) return;
     let aplicados = 0;
     Object.entries(obj.locales).forEach(([id, r]) => {
-      if (!r || typeof r !== 'object' || !EST[r.estado || 'pendiente']) return;
+      r = migrarRegistro(r);   // admite copias hechas con versiones anteriores de la app
+      if (!r) return;
       const actual = almacen.locales[id];
-      if (!actual || (r.t || 0) > (actual.t || 0)) { almacen.locales[id] = { estado: 'pendiente', nota: '', hist: [], ...r }; aplicados++; }
+      if (!actual || (r.t || 0) > (actual.t || 0)) { almacen.locales[id] = { nota: '', hist: [], ...r }; aplicados++; }
     });
     guardar();
     D.forEach(actualizarMarcador); refrescar(false);
     toast(`Copia restaurada: ${aplicados} locales actualizados`);
   });
   function pintarInfoCopia() {
-    const n = Object.values(almacen.locales).filter(r => r.estado !== 'pendiente' || r.nota).length;
+    const n = Object.values(almacen.locales).filter(r => r.estado !== 'sin' || r.nota).length;
     $('#infoCopia').textContent = (almacen.ultimaCopia ? `Última copia: ${fechaHora(almacen.ultimaCopia)}. ` : 'Todavía no has hecho ninguna copia. ') +
       `Tienes ${n} locales con estado o nota.`;
   }

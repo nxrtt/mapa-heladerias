@@ -132,7 +132,6 @@ details { margin: 8px 0; } summary { cursor: pointer; color: var(--suave); paddi
 #toast { position: fixed; left: 50%; bottom: calc(70px + var(--sa-abajo)); transform: translateX(-50%); background: #000; color: #fff;
   padding: 10px 16px; border-radius: 20px; font-size: 14px; z-index: 3000; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90vw; }
 #toast.ver { opacity: .92; }
-@media (max-width: 380px) { #cab h1 { font-size: 0; } #cab h1::first-letter { font-size: 20px; } }
 @media (orientation: landscape) and (max-height: 500px) {
   #cab h1 { display: none; } #cab .fila { margin-bottom: 4px; } .hoja { max-height: 94dvh; }
   .rapidas { grid-template-columns: repeat(8, 1fr); }
